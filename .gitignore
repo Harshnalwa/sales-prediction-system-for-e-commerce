@@ -1,0 +1,8 @@
+node_modules/
+__pycache__/
+.venv/
+frontend/dist/
+data/processed/
+data/raw/train.csv
+backend/models/
+backend/outputs/

@@ -1,0 +1,11 @@
+/* Small reset. The old Vite template CSS was removed because
+   it centered #root at 1126px and broke the layout. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
