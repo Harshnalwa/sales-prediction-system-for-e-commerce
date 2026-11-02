@@ -1,75 +1,205 @@
-# Product Demand Prediction
+# Sales Prediction System for E-Commerce
 
-A college ML project that predicts weekly sales.
-Scikit-learn preprocessing Pipeline + Random Forest model + FastAPI backend + React (Vite) frontend.
+A full-stack machine learning application that predicts weekly store sales using a scikit-learn preprocessing pipeline and Random Forest Regressor. The backend is built with FastAPI and the user interface uses React with Vite.
 
-## Folder structure
+## Features
 
+- Weekly sales prediction from store, department, date, promotions and economic indicators.
+- One saved scikit-learn Pipeline handles preprocessing and prediction.
+- Chronological holdout evaluation and expanding-window walk-forward validation.
+- FastAPI endpoints for health, predictions and saved model metrics.
+- React dashboard with model metrics and recent prediction history.
+- Automated backend API tests and frontend production-build checks through GitHub Actions.
+
+## Repository structure
+
+```text
+.
+├── .github/workflows/ci.yml
+├── backend/
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── requirements-dev.txt
+│   ├── run_pipeline.py
+│   ├── tests/
+│   │   ├── conftest.py
+│   │   └── test_api.py
+│   └── ml/
+├── data/raw/
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   ├── .env.example
+│   └── vercel.json
+├── render.yaml
+└── README.md
 ```
-product-demand-prediction/
-|-- data/
-|   |-- raw/             features.csv, stores.csv, train.csv (you add train.csv)
-|   `-- processed/       csv files created by the scripts (automatic)
-|-- backend/
-|   |-- ml/              ML scripts (merge, preprocessing, eda, ...)
-|   |-- models/          trained .pkl model (automatic)
-|   |-- outputs/         graphs (automatic)
-|   |-- main.py          FastAPI app
-|   |-- run_pipeline.py  runs all ML steps in order
-|   `-- requirements.txt
-|-- frontend/            React + Vite app
-|-- .vscode/             VS Code tasks
-|-- VIVA_NOTES.md        viva questions and answers
-`-- README.md
-```
 
-## First-time setup (only once)
+## Requirements
 
-**Required:** Python 3.10+ and Node.js 18+.
+- Python 3.10 or newer
+- Node.js 20 or newer (18+ may work with the current Vite setup)
+- npm
 
-1. Extract the zip and open the folder in VS Code (File > Open Folder).
-2. Put **train.csv** in `data/raw/`.
-3. Open a terminal (Ctrl + `) and train the model:
+## 1. Train the machine learning model
 
-```
+The repository's `data/raw/` folder contains `train.csv`, `features.csv` and `stores.csv`.
+
+Windows PowerShell:
+
+```powershell
 cd backend
 python -m venv .venv
-.venv\Scripts\activate          # Windows
-source .venv/bin/activate       # Mac/Linux
-pip install -r requirements.txt
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 python run_pipeline.py
 ```
 
-This runs every step from merging to saving the model. At the end,
-`backend/models/random_forest_model.pkl` is created.
+macOS/Linux:
 
-## Run the app (every time)
-
-**Terminal 1: Backend**
-
-```
+```bash
 cd backend
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python run_pipeline.py
+```
+
+The pipeline creates processed data, evaluation outputs and the trained artifact at:
+
+```text
+backend/models/random_forest_model.pkl
+```
+
+The model artifact is intentionally excluded from Git. Do not commit large model files or secrets to the repository.
+
+## 2. Run the backend locally
+
+From the `backend/` directory with the virtual environment active:
+
+```bash
 python -m uvicorn main:app --reload
 ```
 
-API docs: http://127.0.0.1:8000/docs
+- API: http://127.0.0.1:8000
+- Swagger documentation: http://127.0.0.1:8000/docs
+- Health: http://127.0.0.1:8000/health
+- Model metrics: http://127.0.0.1:8000/model-metrics
 
-**Terminal 2: Frontend**
+The API can start without a model artifact so health checks and documentation remain available. The prediction endpoint returns HTTP 503 until the trained artifact is present.
 
-```
+## 3. Run the frontend locally
+
+Open another terminal:
+
+```bash
 cd frontend
-npm install        # first time only
+npm install
 npm run dev
 ```
 
-Open in the browser: http://localhost:5173
+Open http://localhost:5173.
 
-Shortcut: in VS Code press Ctrl+Shift+P > "Tasks: Run Task" > "Start App".
+For local development, the frontend defaults to `http://127.0.0.1:8000`. To override it, copy `frontend/.env.example` to `frontend/.env.local` and set `VITE_API_URL`.
 
-## Things to remember
+## 4. Run automated tests
 
-- A single saved Scikit-learn Pipeline performs store-type encoding and Random Forest prediction in both training and the API. Do not add separate preprocessing to `main.py`.
-- The dashboard loads the final holdout R² and walk-forward validation scores dynamically from the backend `/model-metrics` endpoint.
-- Model validation uses three expanding-window walk-forward folds over unique weeks, plus a separate final chronological 20% holdout.
-- The backend will not start until the model is trained (the .pkl file is required).
-- Without the backend, the frontend shows "API offline".
+The tests use a lightweight fake model through FastAPI dependency overrides. They do not need the full training dataset or the saved model artifact, so they can run on a clean GitHub Actions runner.
+
+```bash
+cd backend
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+The API tests cover:
+
+- Home and health endpoints
+- Model metrics response
+- Successful prediction response
+- Invalid store ID and store type validation
+- Missing-model behavior and safe metrics fallback
+
+GitHub Actions runs backend tests and a frontend production build on every push to `main` and every pull request targeting `main`. Check the Actions tab for the run result.
+
+## 5. Deploy the backend to Render
+
+The root `render.yaml` provides the service configuration.
+
+1. Push the repository to GitHub.
+2. In Render, create a new Blueprint and select this repository, or create a Web Service manually.
+3. For a manual service, use:
+   - Root directory: `backend`
+   - Build command: `pip install -r requirements.txt`
+   - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - Health check path: `/health`
+4. Generate the model locally using the training steps above.
+5. Upload `backend/models/random_forest_model.pkl` to trusted private object storage. Create a direct-download, time-limited signed URL for the file.
+6. Add these Render environment variables:
+   - `MODEL_ARTIFACT_URL`: signed direct-download URL for the model artifact
+   - `FRONTEND_ORIGINS`: exact deployed Vercel origin, for example `https://your-project.vercel.app`
+7. Deploy and check `https://your-backend.onrender.com/health`. Confirm the response contains `"model_loaded": true`.
+8. Open `https://your-backend.onrender.com/docs` and test the prediction endpoint.
+
+The API downloads the configured artifact on its first model-dependent request if it is not already present. The file is cached on the service filesystem for that running instance. If the hosting platform replaces its filesystem during a redeploy or restart, the artifact can be downloaded again from the configured URL.
+
+**Model security:** joblib/pickle artifacts can execute code when loaded. Only use a model file generated by this project and stored in an account you control. Keep signed URLs private, rotate expired URLs, and never paste them into source code or commit them to Git.
+
+## 6. Deploy the frontend to Vercel
+
+1. Import this GitHub repository into Vercel.
+2. Set the project Root Directory to `frontend`.
+3. Use the following build settings:
+   - Framework preset: Vite
+   - Build command: `npm run build`
+   - Output directory: `dist`
+   - Install command: `npm install`
+4. Add the environment variable:
+   - `VITE_API_URL`: your deployed Render backend URL, for example `https://your-backend.onrender.com`
+5. Deploy the frontend.
+6. Copy the final Vercel origin and add it to the Render `FRONTEND_ORIGINS` variable. Redeploy the backend if required.
+
+The `frontend/vercel.json` file routes frontend paths back to `index.html`, which keeps the React single-page application working when a page is refreshed.
+
+## 7. Production verification checklist
+
+- [ ] Render health endpoint returns HTTP 200.
+- [ ] Health response reports `model_loaded: true`.
+- [ ] Model metrics endpoint returns the saved holdout and walk-forward metrics.
+- [ ] Vercel frontend loads without console errors.
+- [ ] Frontend API status shows API connected.
+- [ ] A valid prediction returns a numeric weekly sales estimate.
+- [ ] An invalid request is rejected with HTTP 422.
+- [ ] Browser requests are allowed only from the configured frontend origin.
+- [ ] GitHub Actions backend tests and frontend build are green.
+
+## API request example
+
+```json
+{
+  "Store": 1,
+  "Dept": 1,
+  "IsHoliday": false,
+  "Temperature": 42.31,
+  "Fuel_Price": 2.572,
+  "MarkDown1": 0,
+  "MarkDown2": 0,
+  "MarkDown3": 0,
+  "MarkDown4": 0,
+  "MarkDown5": 0,
+  "CPI": 211.096358,
+  "Unemployment": 8.106,
+  "Type": "A",
+  "Size": 151315,
+  "Year": 2010,
+  "Month": 2,
+  "Week": 5
+}
+```
+
+## Notes
+
+- The prediction is an estimate, not a guarantee of future sales.
+- Keep training and serving preprocessing in the same saved scikit-learn Pipeline.
+- Do not retrain the full model during every CI run; CI uses a fake model for fast, deterministic API tests.
+- Local CORS origins are enabled by default. Configure deployed origins through `FRONTEND_ORIGINS`.
