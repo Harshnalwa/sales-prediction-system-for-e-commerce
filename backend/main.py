@@ -79,13 +79,8 @@ def _download_model_if_configured() -> None:
 
 
 @lru_cache(maxsize=1)
-def load_model_bundle():
-    """Load the trained pipeline once; return None when no artifact is available."""
-    _download_model_if_configured()
-
-    if not MODEL_PATH.exists():
-        return None
-
+def _load_model_bundle_from_disk():
+    """Cache a successfully loaded model, never a missing-model result."""
     saved_data = joblib.load(MODEL_PATH)
     if not isinstance(saved_data, dict) or "model" not in saved_data:
         raise ValueError("The saved model artifact has an invalid format.")
@@ -94,6 +89,17 @@ def load_model_bundle():
         "model": saved_data["model"],
         "metrics": saved_data.get("metrics", {}),
     }
+
+
+def load_model_bundle():
+    """Load the trained pipeline once; return None when no artifact is available."""
+    _download_model_if_configured()
+
+    # Do not cache None: a model may be trained or mounted after API startup.
+    if not MODEL_PATH.exists():
+        return None
+
+    return _load_model_bundle_from_disk()
 
 
 def get_model_bundle():
