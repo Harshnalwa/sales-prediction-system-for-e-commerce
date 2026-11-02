@@ -3,9 +3,6 @@ import "./App.css";
 
 const API_URL = "http://127.0.0.1:8000";
 
-// Put the R2 score printed by random_forest.py here
-const MODEL_R2 = "0.9606";
-
 // Form sections. Each field: name (API field name), label, hint
 const sections = [
   {
@@ -98,12 +95,35 @@ function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [apiStatus, setApiStatus] = useState("checking");
+  const [modelMetrics, setModelMetrics] = useState(null);
 
-  // When the page opens, check whether the backend is running
+  // Load API status and the latest model metrics when the page opens
   useEffect(() => {
-    fetch(`${API_URL}/health`)
-      .then((res) => setApiStatus(res.ok ? "online" : "offline"))
-      .catch(() => setApiStatus("offline"));
+    async function loadDashboardData() {
+      try {
+        const [healthResponse, metricsResponse] = await Promise.all([
+          fetch(`${API_URL}/health`),
+          fetch(`${API_URL}/model-metrics`),
+        ]);
+
+        if (!healthResponse.ok) {
+          throw new Error("Backend health check failed.");
+        }
+
+        setApiStatus("online");
+
+        if (!metricsResponse.ok) {
+          throw new Error("Could not load model metrics.");
+        }
+
+        const metrics = await metricsResponse.json();
+        setModelMetrics(metrics);
+      } catch {
+        setApiStatus("offline");
+      }
+    }
+
+    loadDashboardData();
   }, []);
 
   function handleChange(event) {
@@ -321,11 +341,15 @@ function App() {
             <dl className="model">
               <div>
                 <dt>Model</dt>
-                <dd>Random Forest Regressor</dd>
+                <dd>{modelMetrics?.model || "Random Forest Regressor"}</dd>
               </div>
               <div>
                 <dt>Validation R²</dt>
-                <dd>{MODEL_R2}</dd>
+                <dd>
+                  {typeof modelMetrics?.r2_score === "number"
+                    ? modelMetrics.r2_score.toFixed(4)
+                    : "Not available"}
+                </dd>
               </div>
             </dl>
           </section>
