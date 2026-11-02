@@ -351,6 +351,22 @@ function App() {
                     : "Not available"}
                 </dd>
               </div>
+              {modelMetrics?.walk_forward_validation && (
+                <div>
+                  <dt>Walk-forward mean R² ({modelMetrics.walk_forward_validation.n_splits} folds)</dt>
+                  <dd>{modelMetrics.walk_forward_validation.mean_r2.toFixed(4)}</dd>
+                </div>
+              )}
+              {modelMetrics?.walk_forward_validation && (
+                <div>
+                  <dt>Fold R² scores</dt>
+                  <dd>
+                    {modelMetrics.walk_forward_validation.folds
+                      .map((fold) => fold.r2_score.toFixed(4))
+                      .join(" / ")}
+                  </dd>
+                </div>
+              )}
             </dl>
           </section>
 
