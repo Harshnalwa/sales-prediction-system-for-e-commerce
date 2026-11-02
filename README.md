@@ -1,7 +1,7 @@
 # Product Demand Prediction
 
 A college ML project that predicts weekly sales.
-Random Forest model + FastAPI backend + React (Vite) frontend.
+Scikit-learn preprocessing Pipeline + Random Forest model + FastAPI backend + React (Vite) frontend.
 
 ## Folder structure
 
@@ -68,6 +68,7 @@ Shortcut: in VS Code press Ctrl+Shift+P > "Tasks: Run Task" > "Start App".
 
 ## Things to remember
 
+- A single saved Scikit-learn Pipeline performs store-type encoding and Random Forest prediction in both training and the API. Do not add separate preprocessing to `main.py`.
 - The dashboard loads the final holdout R² and walk-forward validation scores dynamically from the backend `/model-metrics` endpoint.
 - Model validation uses three expanding-window walk-forward folds over unique weeks, plus a separate final chronological 20% holdout.
 - The backend will not start until the model is trained (the .pkl file is required).
