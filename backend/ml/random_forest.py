@@ -5,14 +5,33 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from config import MODELS_DIR, OUTPUTS_DIR, PROCESSED_DIR
+from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
 
 
 def create_model():
-    """Return a consistently configured Random Forest model."""
-    return RandomForestRegressor(
+    """
+    Create one complete preprocessing + model pipeline.
+
+    The Type column is one-hot encoded inside the pipeline.
+    All remaining numeric columns pass through unchanged.
+    """
+    preprocessing = ColumnTransformer(
+        transformers=[
+            (
+                "store_type",
+                OneHotEncoder(handle_unknown="ignore", dtype=int),
+                ["Type"],
+            )
+        ],
+        remainder="passthrough",
+    )
+
+    random_forest = RandomForestRegressor(
         n_estimators=100,
         max_depth=15,
         min_samples_leaf=2,
@@ -20,19 +39,12 @@ def create_model():
         n_jobs=-1,
     )
 
-
-def prepare_features(train_frame, valid_frame):
-    """One-hot encode store type and align validation columns to training."""
-    X_train = train_frame.drop(columns=["Weekly_Sales", "Date"])
-    y_train = train_frame["Weekly_Sales"]
-    X_valid = valid_frame.drop(columns=["Weekly_Sales", "Date"])
-    y_valid = valid_frame["Weekly_Sales"]
-
-    X_train = pd.get_dummies(X_train, columns=["Type"], dtype=int)
-    X_valid = pd.get_dummies(X_valid, columns=["Type"], dtype=int)
-    X_valid = X_valid.reindex(columns=X_train.columns, fill_value=0)
-
-    return X_train, y_train, X_valid, y_valid
+    return Pipeline(
+        steps=[
+            ("preprocessing", preprocessing),
+            ("model", random_forest),
+        ]
+    )
 
 
 def calculate_metrics(actual, predicted):
@@ -50,9 +62,14 @@ valid_df = pd.read_csv(PROCESSED_DIR / "validation_processed.csv", parse_dates=[
 if train_df["Date"].max() >= valid_df["Date"].min():
     raise ValueError("Training and holdout validation dates overlap.")
 
+# Keep raw input columns. The Pipeline performs Type encoding itself.
+X_train = train_df.drop(columns=["Weekly_Sales", "Date"])
+y_train = train_df["Weekly_Sales"]
+X_valid = valid_df.drop(columns=["Weekly_Sales", "Date"])
+y_valid = valid_df["Weekly_Sales"]
+
 # ---------- 2. Walk-forward validation on the training period ----------
-# Split unique weeks rather than individual rows so that all stores and
-# departments from one week stay in the same fold.
+# Split unique weeks so records from the same week never enter different folds.
 train_dates = np.array(sorted(train_df["Date"].unique()))
 n_splits = 3
 if len(train_dates) <= n_splits:
@@ -73,10 +90,12 @@ for fold_number, (train_indices, valid_indices) in enumerate(
     fold_train = train_df[train_df["Date"].isin(fold_train_dates)]
     fold_valid = train_df[train_df["Date"].isin(fold_valid_dates)]
 
-    X_fold_train, y_fold_train, X_fold_valid, y_fold_valid = prepare_features(
-        fold_train, fold_valid
-    )
+    X_fold_train = fold_train.drop(columns=["Weekly_Sales", "Date"])
+    y_fold_train = fold_train["Weekly_Sales"]
+    X_fold_valid = fold_valid.drop(columns=["Weekly_Sales", "Date"])
+    y_fold_valid = fold_valid["Weekly_Sales"]
 
+    # Every fold gets a fresh pipeline, fitted only on that fold's training data.
     fold_model = create_model()
     fold_model.fit(X_fold_train, y_fold_train)
     fold_predictions = fold_model.predict(X_fold_valid)
@@ -111,16 +130,15 @@ walk_forward_metrics = {
 print("\nWalk-forward mean R2:", round(walk_forward_metrics["mean_r2"], 4))
 print("Walk-forward R2 standard deviation:", round(walk_forward_metrics["std_r2"], 4))
 
-# ---------- 3. Train final model on the full training period ----------
-X_train, y_train, X_valid, y_valid = prepare_features(train_df, valid_df)
+# ---------- 3. Train final pipeline on the full training period ----------
 model = create_model()
 
-print("\nTraining final Random Forest...")
+print("\nTraining final Random Forest pipeline...")
 start = time.time()
 model.fit(X_train, y_train)
 print("Training time:", round(time.time() - start, 2), "seconds")
 
-# Keep the final chronological holdout as a separate, untouched evaluation.
+# Evaluate once on the separate, untouched chronological holdout.
 predictions = model.predict(X_valid)
 holdout_metrics = calculate_metrics(y_valid, predictions)
 
@@ -130,13 +148,12 @@ print("MAE:", round(holdout_metrics["mae"], 2))
 print("RMSE:", round(holdout_metrics["rmse"], 2))
 print("R2 Score:", round(holdout_metrics["r2_score"], 4))
 
-# ---------- 4. Save model, feature columns, and all validation metrics ----------
+# ---------- 4. Save the complete fitted pipeline and validation metrics ----------
 joblib.dump(
     {
         "model": model,
-        "feature_columns": X_train.columns.tolist(),
         "metrics": {
-            "model": "Random Forest Regressor",
+            "model": "Random Forest Regressor (Scikit-learn Pipeline)",
             "r2_score": holdout_metrics["r2_score"],
             "mae": holdout_metrics["mae"],
             "rmse": holdout_metrics["rmse"],
@@ -146,7 +163,7 @@ joblib.dump(
     },
     MODELS_DIR / "random_forest_model.pkl",
 )
-print("\nModel, feature columns, and validation metrics saved successfully!")
+print("\nComplete preprocessing pipeline and metrics saved successfully!")
 
 # ---------- 5. Graph: actual vs predicted on final holdout ----------
 plt.figure(figsize=(8, 6))
@@ -161,9 +178,13 @@ plt.tight_layout()
 plt.savefig(OUTPUTS_DIR / "actual_vs_predicted.png")
 plt.close()
 
-# ---------- 6. Feature importance ----------
+# ---------- 6. Feature importance from the Random Forest inside the pipeline ----------
+preprocessor = model.named_steps["preprocessing"]
+random_forest = model.named_steps["model"]
+feature_names = preprocessor.get_feature_names_out()
+
 importance = pd.DataFrame(
-    {"Feature": X_train.columns, "Importance": model.feature_importances_}
+    {"Feature": feature_names, "Importance": random_forest.feature_importances_}
 ).sort_values(by="Importance", ascending=False)
 
 print("\nTop 10 Important Features:")
