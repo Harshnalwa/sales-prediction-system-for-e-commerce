@@ -56,7 +56,16 @@ print("R2 Score:", round(r2, 4))
 
 # ---------- 4. Save the model together with its feature columns ----------
 joblib.dump(
-    {"model": model, "feature_columns": X_train.columns.tolist()},
+    {
+        "model": model,
+        "feature_columns": X_train.columns.tolist(),
+        "metrics": {
+            "model": "Random Forest Regressor",
+            "r2_score": float(r2),
+            "mae": float(mae),
+            "rmse": float(rmse),
+        },
+    },
     MODELS_DIR / "random_forest_model.pkl",
 )
 print("\nModel and feature columns saved successfully!")
