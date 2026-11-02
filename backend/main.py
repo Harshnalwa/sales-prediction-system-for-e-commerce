@@ -35,6 +35,7 @@ if not MODEL_PATH.exists():
 saved_data = joblib.load(MODEL_PATH)
 model = saved_data["model"]
 feature_columns = saved_data["feature_columns"]  # column order used in training
+model_metrics = saved_data.get("metrics", {})
 
 
 # ---------- Input validation ----------
@@ -72,6 +73,21 @@ def home():
 @app.get("/health")
 def health():
     return {"status": "healthy", "model_loaded": model is not None}
+
+
+@app.get("/model-metrics")
+def get_model_metrics():
+    """Return evaluation metrics from the latest saved model training run."""
+    if not model_metrics:
+        return {
+            "model": "Random Forest Regressor",
+            "r2_score": None,
+            "mae": None,
+            "rmse": None,
+            "message": "Metrics unavailable. Retrain the model using python run_pipeline.py.",
+        }
+
+    return model_metrics
 
 
 @app.post("/predict")
