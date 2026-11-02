@@ -34,7 +34,6 @@ if not MODEL_PATH.exists():
 
 saved_data = joblib.load(MODEL_PATH)
 model = saved_data["model"]
-feature_columns = saved_data["feature_columns"]  # column order used in training
 model_metrics = saved_data.get("metrics", {})
 
 
@@ -95,16 +94,8 @@ def predict_sales(data: SalesInput):
     # 1. Convert the request into a DataFrame
     input_df = pd.DataFrame([data.model_dump()])
 
-    # 2. Convert the holiday flag from True/False to 1/0
-    input_df["IsHoliday"] = input_df["IsHoliday"].astype(int)
-
-    # 3. One-hot encode the store Type (same as training)
-    input_df = pd.get_dummies(input_df, columns=["Type"], dtype=int)
-
-    # 4. Match the training column order; any missing column becomes 0
-    input_df = input_df.reindex(columns=feature_columns, fill_value=0)
-
-    # 5. Predict
+    # The saved scikit-learn Pipeline handles Type encoding and feature
+    # transformation exactly as it did during training.
     prediction = float(model.predict(input_df)[0])
 
     return {
