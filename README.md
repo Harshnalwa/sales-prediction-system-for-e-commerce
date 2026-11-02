@@ -68,6 +68,7 @@ Shortcut: in VS Code press Ctrl+Shift+P > "Tasks: Run Task" > "Start App".
 
 ## Things to remember
 
-- Update `MODEL_R2` in `frontend/src/App.jsx` with the real R2 score printed by `random_forest.py`.
+- The dashboard loads the final holdout R² and walk-forward validation scores dynamically from the backend `/model-metrics` endpoint.
+- Model validation uses three expanding-window walk-forward folds over unique weeks, plus a separate final chronological 20% holdout.
 - The backend will not start until the model is trained (the .pkl file is required).
 - Without the backend, the frontend shows "API offline".
